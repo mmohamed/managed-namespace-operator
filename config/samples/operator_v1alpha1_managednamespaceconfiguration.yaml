@@ -1,0 +1,9 @@
+apiVersion: operator.medinvention.io/v1alpha1
+kind: ManagedNamespaceConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/name: managed-namespace
+    app.kubernetes.io/managed-by: kustomize
+  name: managednamespaceconfiguration-sample
+spec:
+  # TODO(user): Add fields here

@@ -1,0 +1,49 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- resources:
+  - namespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- resources:
+  - namespaces/status
+  verbs:
+  - get
+- apiGroups:
+  - operator.medinvention.io
+  resources:
+  - managednamespaceconfigurations
+  - managednamespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.medinvention.io
+  resources:
+  - managednamespaceconfigurations/finalizers
+  - managednamespaces/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.medinvention.io
+  resources:
+  - managednamespaceconfigurations/status
+  - managednamespaces/status
+  verbs:
+  - get
+  - patch
+  - update
