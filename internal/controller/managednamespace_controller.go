@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"maps"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -36,6 +35,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/mmohamed/managed-namespace/api/v1alpha1"
+	mergemap "github.com/mmohamed/managed-namespace/internal/utils"
 )
 
 // ManagedNamespaceReconciler reconciles a ManagedNamespace object
@@ -55,7 +55,10 @@ const (
 )
 
 var (
-	referredAnnotation = "managednamespace.operator.medinvention.io/referred-to"
+	referredAnnotation                      = "managednamespace.operator.medinvention.io/referred-to"
+	managedNamespaceConfigurationAnnotation = "managednamespace.operator.medinvention.io/managednamespaceconfiguration"
+	managedNamespaceAnnotation              = "managednamespace.operator.medinvention.io/managednamespace"
+	managedNamespaceResourceAnnotation      = "managednamespace.operator.medinvention.io/managednamespaceresource"
 )
 
 // +kubebuilder:rbac:groups=operator.medinvention.io,resources=managednamespaces,verbs=get;list;watch;create;update;patch;delete
@@ -226,9 +229,15 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 			Version: resource.Resource.ApiVersion,
 		})
 
+		rsSelector := client.ObjectKey{Namespace: namespace.ObjectMeta.Name, Name: resource.Resource.Name}
+		if len(resource.Resource.Namespace) > 0 {
+			rsSelector = client.ObjectKey{Namespace: resource.Resource.Namespace, Name: resource.Resource.Name}
+		} else if resource.Resource.ClusterResource == true {
+			rsSelector = client.ObjectKey{Name: resource.Resource.Name}
+		}
 		newOne := false
 		// check if exist
-		if err := r.Get(ctx, client.ObjectKey{Namespace: namespace.ObjectMeta.Name, Name: resource.Resource.Name}, rs); err != nil {
+		if err := r.Get(ctx, rsSelector, rs); err != nil {
 			if !apierrors.IsNotFound(err) {
 				log.Error(err, fmt.Sprintf("Unable to get resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
 				return err
@@ -239,8 +248,16 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 		// found, check management
 		if newOne == false {
 			annotations := rs.Object["metadata"].(map[string]interface{})["annotations"]
-			referredAnnotationContent, ok := annotations.(map[string]interface{})[referredAnnotation]
-			if !ok || referredAnnotationContent != fmt.Sprintf("%s-%s", configuration.ObjectMeta.Name, resource.Resource.Name) {
+			unmanaged := false
+
+			managedNamespaceConfigurationAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceConfigurationAnnotation]
+			unmanaged = !ok || managedNamespaceConfigurationAnnotationContent != configuration.ObjectMeta.Name
+			managedNamespaceAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceAnnotation]
+			unmanaged = !ok || managedNamespaceAnnotationContent != namespace.ObjectMeta.Name
+			managedNamespaceResourceAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceResourceAnnotation]
+			unmanaged = !ok || managedNamespaceResourceAnnotationContent != fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name)
+
+			if unmanaged {
 				log.Error(nil, fmt.Sprintf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.ObjectMeta.Name))
 				return fmt.Errorf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.ObjectMeta.Name)
 			}
@@ -248,15 +265,23 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 
 		rs.Object = map[string]any{
 			"metadata": map[string]any{
-				"name":      resource.Resource.Name,
-				"namespace": namespace.ObjectMeta.Name,
+				"name": resource.Resource.Name,
 				"annotations": map[string]any{
-					referredAnnotation: fmt.Sprintf("%s-%s", configuration.ObjectMeta.Name, resource.Resource.Name),
+					managedNamespaceConfigurationAnnotation: configuration.ObjectMeta.Name,
+					managedNamespaceAnnotation:              namespace.ObjectMeta.Name,
+					managedNamespaceResourceAnnotation:      fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name),
 				},
 			},
 		}
 
-		maps.Insert(rs.Object, maps.All(out))
+		rs.Object = mergemap.Merge(rs.Object, out)
+
+		// set namespace
+		if len(resource.Resource.Namespace) > 0 {
+			rs.Object["metadata"].(map[string]interface{})["namespace"] = resource.Resource.Namespace
+		} else if resource.Resource.ClusterResource != true {
+			rs.Object["metadata"].(map[string]interface{})["namespace"] = namespace.ObjectMeta.Name
+		}
 
 		// Set ownerRef
 		if err := ctrl.SetControllerReference(managedNamespace, rs, r.Scheme); err != nil {

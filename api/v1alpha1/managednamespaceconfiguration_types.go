@@ -53,6 +53,10 @@ type Resource struct {
 	Kind string `json:"kind"`
 	// +required
 	Name string `json:"name"`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+	// +optional
+	ClusterResource bool `json:"clusterresource,omitempty"`
 }
 
 // Callbacks defines the list of webhook/callback configuration.

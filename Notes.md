@@ -28,6 +28,20 @@ spec:
             subjects:
                 - kind: Group
                   name: project-group
+        - resource: 
+            kind: ConfigMap
+            apiVersion: v1
+            name: mn-configmap
+            namespace: default
+          content: |
+            metadata:
+                annotations:
+                    annotations/description: annotation-content
+                labels:
+                    labels/description: label-content
+            data:
+                dbname: dbname
+                path : "/"
 
 EOF
 

@@ -68,9 +68,13 @@ spec:
                       properties:
                         apiVersion:
                           type: string
+                        clusterresource:
+                          type: boolean
                         kind:
                           type: string
                         name:
+                          type: string
+                        namespace:
                           type: string
                       required:
                       - kind
