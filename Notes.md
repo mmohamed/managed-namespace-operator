@@ -170,9 +170,7 @@ EOF
 
 
 # TODO
-- Refactoring
-- Degraded state if resource or callback failed
-- Error state if namespace not managed correctly
+- Code cleanup
 - Cleanup resources on managed namespace configuration updated 
 - Test suite
 - Build and deploy

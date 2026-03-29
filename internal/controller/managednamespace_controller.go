@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -37,6 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1alpha1 "github.com/mmohamed/managed-namespace/api/v1alpha1"
 	mergemap "github.com/mmohamed/managed-namespace/internal/utils"
@@ -191,6 +193,16 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	for _, configuration := range configurations.Items {
 		if err := r.ApplyConfiguration(ctx, &managedNamespace, &configuration, &namespace); err != nil {
 			log.Error(err, fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s", configuration.ObjectMeta.Name))
+			// Update status condition to reflect the error
+			meta.SetStatusCondition(&managedNamespace.Status.Conditions, metav1.Condition{
+				Type:    typeDegradedManagedNamespace,
+				Status:  metav1.ConditionFalse,
+				Reason:  "ReconciliationError",
+				Message: fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s, check logs", configuration.ObjectMeta.Name),
+			})
+			if statusErr := r.Status().Update(ctx, &managedNamespace); statusErr != nil {
+				log.Error(statusErr, "Failed to update ManagedNamespace status")
+			}
 			return ctrl.Result{}, err
 		}
 		log.Info(fmt.Sprintf("Configuration '%s' applied to namespace '%s'", configuration.ObjectMeta.Name, req.Name))
@@ -206,6 +218,18 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to update ManagedNamespace status")
 		return ctrl.Result{}, err
 	}
+	// re-fetch
+	if err := r.Get(ctx, req.NamespacedName, &managedNamespace); err != nil {
+		log.Error(err, "Failed to re-fetch ManagedNamespace")
+		return ctrl.Result{}, err
+	}
+	// last sync time
+	patch := []byte(fmt.Sprintf(`{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339)))
+	if statusErr := r.Status().Patch(ctx, &managedNamespace, client.RawPatch(types.MergePatchType, patch)); statusErr != nil {
+		log.Error(statusErr, "Failed to update ManagedNamespace status last sync time")
+		return ctrl.Result{}, statusErr
+	}
+
 	log.Info(fmt.Sprintf("All configuration are applied to namespace '%s'", req.Name))
 
 	return ctrl.Result{}, nil
@@ -348,8 +372,9 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 		}
 		// check status code
 		if (len(callback.SuccessCodes) == 0 && (response.StatusCode < 200 || response.StatusCode > 299)) || (len(callback.SuccessCodes) > 0 && slices.Contains(callback.SuccessCodes, response.StatusCode) == false) {
-			log.Error(err, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
-			return err
+			statusCodeError := errors.New(fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
+			log.Error(statusCodeError, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
+			return statusCodeError
 		}
 		log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", callback.URI, configuration.ObjectMeta.Name, response.StatusCode))
 	}
@@ -360,6 +385,7 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 func (r *ManagedNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ManagedNamespace{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Named("managednamespace").
 		Owns(&corev1.Namespace{}).
 		Complete(r)
