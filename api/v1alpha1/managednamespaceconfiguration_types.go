@@ -62,9 +62,23 @@ type Resource struct {
 // Callbacks defines the list of webhook/callback configuration.
 type Callbacks struct {
 	// +required
-	URI          string  `json:"uri"`
-	Method       string  `json:"method,omitempty"`
-	SuccessCodes []int32 `json:"successCodes,omitempty"`
+	URI string `json:"uri"`
+	// +optional
+	Method string `json:"method,omitempty"`
+	// +optional
+	SuccessCodes []int `json:"successcodes,omitempty"`
+	// +optional
+	CACert string `json:"cacert,omitempty"`
+	// +optional
+	Headers []HTTPHeader `json:"headers,omitempty"`
+}
+
+// Resources defines an HTTP Header for callback.
+type HTTPHeader struct {
+	// +required
+	Name string `json:"name"`
+	// +required
+	Value string `json:"value"`
 }
 
 // ManagedNamespaceConfigurationStatus defines the observed state of ManagedNamespaceConfiguration.

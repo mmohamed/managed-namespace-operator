@@ -44,11 +44,25 @@ spec:
                 items:
                   description: Callbacks defines the list of webhook/callback configuration.
                   properties:
+                    cacert:
+                      type: string
+                    headers:
+                      items:
+                        description: Resources defines an HTTP Header for callback.
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
                     method:
                       type: string
-                    successCodes:
+                    successcodes:
                       items:
-                        format: int32
                         type: integer
                       type: array
                     uri:

@@ -18,7 +18,11 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"net/http"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -305,6 +309,49 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 				return err
 			}
 		}
+	}
+	// callbacks
+	for _, callback := range configuration.Spec.Callbacks {
+		// init http client
+		callbaclClient := &http.Client{}
+		// ssl config
+		if len(callback.CACert) > 0 {
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM([]byte(callback.CACert))
+			callbaclClient = &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						RootCAs: caCertPool,
+					},
+				},
+			}
+		}
+		// build request
+		method := "GET"
+		if len(callback.Method) > 0 {
+			method = callback.Method
+		}
+		request, err := http.NewRequest(method, callback.URI, nil)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("Failed creating callback request of %s of configuration %s", callback.URI, configuration.ObjectMeta.Name))
+			return err
+		}
+		// http headers
+		for _, header := range callback.Headers {
+			request.Header.Add(header.Name, header.Value)
+		}
+		// execute
+		response, err := callbaclClient.Do(request)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("Failed callback of %s of configuration %s", callback.URI, configuration.ObjectMeta.Name))
+			return err
+		}
+		// check status code
+		if (len(callback.SuccessCodes) == 0 && (response.StatusCode < 200 || response.StatusCode > 299)) || (len(callback.SuccessCodes) > 0 && slices.Contains(callback.SuccessCodes, response.StatusCode) == false) {
+			log.Error(err, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
+			return err
+		}
+		log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", callback.URI, configuration.ObjectMeta.Name, response.StatusCode))
 	}
 	return nil
 }
