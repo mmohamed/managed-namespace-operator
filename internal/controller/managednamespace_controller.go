@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -115,7 +114,7 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, err
 		}
 		// last sync time
-		patch := []byte(fmt.Sprintf(`{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339)))
+		patch := fmt.Appendf(nil, `{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339))
 		if statusErr := r.Status().Patch(ctx, &managedNamespace, client.RawPatch(types.MergePatchType, patch)); statusErr != nil {
 			log.Error(statusErr, "Failed to update ManagedNamespace status last sync time")
 			return ctrl.Result{}, statusErr
@@ -161,7 +160,11 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 				return ctrl.Result{}, err
 			}
-			r.Get(ctx, client.ObjectKey{Name: req.Name}, ns)
+			// ref-fetch namespace
+			if err := r.Get(ctx, client.ObjectKey{Name: req.Name}, ns); err != nil {
+				log.Error(err, "Failed to re-fetch namespace")
+				return ctrl.Result{}, err
+			}
 			// Set ownerRef
 			if err := ctrl.SetControllerReference(&managedNamespace, ns, r.Scheme); err != nil {
 				log.Error(err, "Failed to set the OwnerRef on namespace")
@@ -172,14 +175,20 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrl.Result{}, err
 			}
 			// refresh
-			r.Get(ctx, client.ObjectKey{Name: req.Name}, &namespace)
-			r.Get(ctx, req.NamespacedName, &managedNamespace)
+			if err := r.Get(ctx, client.ObjectKey{Name: req.Name}, &namespace); err != nil {
+				log.Error(err, "Failed to re-fetch namespace")
+				return ctrl.Result{}, err
+			}
+			if err := r.Get(ctx, req.NamespacedName, &managedNamespace); err != nil {
+				log.Error(err, "Failed to re-fetch ManagedNamespace")
+				return ctrl.Result{}, err
+			}
 		} else {
 			log.Error(err, fmt.Sprintf("Failed to get Namespace: %s", req.Name))
 			return ctrl.Result{}, err
 		}
 	}
-	refferedTo, ok := namespace.ObjectMeta.Annotations[referredAnnotation]
+	refferedTo, ok := namespace.Annotations[referredAnnotation]
 	if !ok || refferedTo != req.Name {
 		log.Error(nil, fmt.Sprintf("Found Namespace %s but not managed by ManagedNamespace controller", req.Name))
 		return ctrl.Result{}, nil
@@ -192,20 +201,20 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	for _, configuration := range configurations.Items {
 		if err := r.ApplyConfiguration(ctx, &managedNamespace, &configuration, &namespace); err != nil {
-			log.Error(err, fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s", configuration.ObjectMeta.Name))
+			log.Error(err, fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s", configuration.Name))
 			// Update status condition to reflect the error
 			meta.SetStatusCondition(&managedNamespace.Status.Conditions, metav1.Condition{
 				Type:    typeDegradedManagedNamespace,
 				Status:  metav1.ConditionFalse,
 				Reason:  "ReconciliationError",
-				Message: fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s, check logs", configuration.ObjectMeta.Name),
+				Message: fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s, check logs", configuration.Name),
 			})
 			if statusErr := r.Status().Update(ctx, &managedNamespace); statusErr != nil {
 				log.Error(statusErr, "Failed to update ManagedNamespace status")
 			}
 			return ctrl.Result{}, err
 		}
-		log.Info(fmt.Sprintf("Configuration '%s' applied to namespace '%s'", configuration.ObjectMeta.Name, req.Name))
+		log.Info(fmt.Sprintf("Configuration '%s' applied to namespace '%s'", configuration.Name, req.Name))
 	}
 
 	meta.SetStatusCondition(&managedNamespace.Status.Conditions, metav1.Condition{
@@ -224,7 +233,7 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 	// last sync time
-	patch := []byte(fmt.Sprintf(`{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339)))
+	patch := fmt.Appendf(nil, `{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339))
 	if statusErr := r.Status().Patch(ctx, &managedNamespace, client.RawPatch(types.MergePatchType, patch)); statusErr != nil {
 		log.Error(statusErr, "Failed to update ManagedNamespace status last sync time")
 		return ctrl.Result{}, statusErr
@@ -238,17 +247,17 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, managedNamespace *operatorv1alpha1.ManagedNamespace, configuration *operatorv1alpha1.ManagedNamespaceConfiguration, namespace *corev1.Namespace) error {
 	log := logf.FromContext(ctx)
 	// not ressource to apply
-	if configuration.Spec.Suspended == true {
+	if configuration.Spec.Suspended {
 		return nil
 	}
-	if configuration.Spec.Resources == nil || len(configuration.Spec.Resources) == 0 {
+	if len(configuration.Spec.Resources) == 0 {
 		return nil
 	}
 	for _, resource := range configuration.Spec.Resources {
 		type Data map[string]any
 		out := Data{}
 		if err := yaml.Unmarshal([]byte(resource.Content), &out); err != nil {
-			log.Error(err, fmt.Sprintf("Unable to decode YAML content of resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
+			log.Error(err, fmt.Sprintf("Unable to decode YAML content of resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 			return err
 		}
 		rs := &unstructured.Unstructured{}
@@ -257,38 +266,38 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 			Version: resource.Resource.ApiVersion,
 		})
 
-		rsName := fmt.Sprintf("%s-%s", resource.Resource.Name, namespace.ObjectMeta.Name)
-		rsSelector := client.ObjectKey{Namespace: namespace.ObjectMeta.Name, Name: rsName}
+		rsName := fmt.Sprintf("%s-%s", resource.Resource.Name, namespace.Name)
+		rsSelector := client.ObjectKey{Namespace: namespace.Name, Name: rsName}
 		if len(resource.Resource.Namespace) > 0 {
 			rsSelector = client.ObjectKey{Namespace: resource.Resource.Namespace, Name: rsName}
-		} else if resource.Resource.ClusterResource == true {
+		} else if resource.Resource.ClusterResource {
 			rsSelector = client.ObjectKey{Name: rsName}
 		}
 		newOne := false
 		// check if exist
 		if err := r.Get(ctx, rsSelector, rs); err != nil {
 			if !apierrors.IsNotFound(err) {
-				log.Error(err, fmt.Sprintf("Unable to get resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
+				log.Error(err, fmt.Sprintf("Unable to get resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 				return err
 			} else {
 				newOne = true
 			}
 		}
 		// found, check management
-		if newOne == false {
-			annotations := rs.Object["metadata"].(map[string]interface{})["annotations"]
+		if !newOne {
+			annotations := rs.Object["metadata"].(map[string]any)["annotations"]
 			unmanaged := false
 
-			managedNamespaceConfigurationAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceConfigurationAnnotation]
-			unmanaged = !ok || managedNamespaceConfigurationAnnotationContent != configuration.ObjectMeta.Name
-			managedNamespaceAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceAnnotation]
-			unmanaged = !ok || managedNamespaceAnnotationContent != namespace.ObjectMeta.Name
-			managedNamespaceResourceAnnotationContent, ok := annotations.(map[string]interface{})[managedNamespaceResourceAnnotation]
-			unmanaged = !ok || managedNamespaceResourceAnnotationContent != fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name)
+			managedNamespaceConfigurationAnnotationContent, ok := annotations.(map[string]any)[managedNamespaceConfigurationAnnotation]
+			unmanaged = !ok || managedNamespaceConfigurationAnnotationContent != configuration.Name
+			managedNamespaceAnnotationContent, ok := annotations.(map[string]any)[managedNamespaceAnnotation]
+			unmanaged = unmanaged || !ok || managedNamespaceAnnotationContent != namespace.Name
+			managedNamespaceResourceAnnotationContent, ok := annotations.(map[string]any)[managedNamespaceResourceAnnotation]
+			unmanaged = unmanaged || !ok || managedNamespaceResourceAnnotationContent != fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name)
 
 			if unmanaged {
-				log.Error(nil, fmt.Sprintf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.ObjectMeta.Name))
-				return fmt.Errorf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.ObjectMeta.Name)
+				log.Error(nil, fmt.Sprintf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.Name))
+				return fmt.Errorf("unmanaged resource %s of configuration %s already found", resource.Resource.Name, configuration.Name)
 			}
 		}
 
@@ -296,8 +305,8 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 			"metadata": map[string]any{
 				"name": rsName,
 				"annotations": map[string]any{
-					managedNamespaceConfigurationAnnotation: configuration.ObjectMeta.Name,
-					managedNamespaceAnnotation:              namespace.ObjectMeta.Name,
+					managedNamespaceConfigurationAnnotation: configuration.Name,
+					managedNamespaceAnnotation:              namespace.Name,
 					managedNamespaceResourceAnnotation:      fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name),
 				},
 			},
@@ -307,14 +316,14 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 
 		// set namespace
 		if len(resource.Resource.Namespace) > 0 {
-			rs.Object["metadata"].(map[string]interface{})["namespace"] = resource.Resource.Namespace
-		} else if resource.Resource.ClusterResource != true {
-			rs.Object["metadata"].(map[string]interface{})["namespace"] = namespace.ObjectMeta.Name
+			rs.Object["metadata"].(map[string]any)["namespace"] = resource.Resource.Namespace
+		} else if !resource.Resource.ClusterResource {
+			rs.Object["metadata"].(map[string]any)["namespace"] = namespace.Name
 		}
 
 		// Set ownerRef
 		if err := ctrl.SetControllerReference(managedNamespace, rs, r.Scheme); err != nil {
-			log.Error(err, fmt.Sprintf("Failed to set the OwnerRef on resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
+			log.Error(err, fmt.Sprintf("Failed to set the OwnerRef on resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 			return err
 		}
 
@@ -323,62 +332,70 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 			Version: resource.Resource.ApiVersion,
 		})
 
-		if newOne == true {
+		if newOne {
 			if err := r.Create(ctx, rs); err != nil {
-				log.Error(err, fmt.Sprintf("Unable to create resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
+				log.Error(err, fmt.Sprintf("Unable to create resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 				return err
 			}
 		} else {
 			if err := r.Update(ctx, rs); err != nil {
-				log.Error(err, fmt.Sprintf("Unable to update resource %s of configuration %s", resource.Resource.Name, configuration.ObjectMeta.Name))
+				log.Error(err, fmt.Sprintf("Unable to update resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 				return err
 			}
 		}
 	}
 	// callbacks
 	for _, callback := range configuration.Spec.Callbacks {
-		// init http client
-		callbaclClient := &http.Client{}
-		// ssl config
-		if len(callback.CACert) > 0 {
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM([]byte(callback.CACert))
-			callbaclClient = &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						RootCAs: caCertPool,
-					},
-				},
-			}
-		}
-		// build request
-		method := "GET"
-		if len(callback.Method) > 0 {
-			method = callback.Method
-		}
-		request, err := http.NewRequest(method, callback.URI, nil)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Failed creating callback request of %s of configuration %s", callback.URI, configuration.ObjectMeta.Name))
+		if err := ExecuteCallback(ctx, &callback, configuration); err != nil {
 			return err
 		}
-		// http headers
-		for _, header := range callback.Headers {
-			request.Header.Add(header.Name, header.Value)
-		}
-		// execute
-		response, err := callbaclClient.Do(request)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Failed callback of %s of configuration %s", callback.URI, configuration.ObjectMeta.Name))
-			return err
-		}
-		// check status code
-		if (len(callback.SuccessCodes) == 0 && (response.StatusCode < 200 || response.StatusCode > 299)) || (len(callback.SuccessCodes) > 0 && slices.Contains(callback.SuccessCodes, response.StatusCode) == false) {
-			statusCodeError := errors.New(fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
-			log.Error(statusCodeError, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.ObjectMeta.Name))
-			return statusCodeError
-		}
-		log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", callback.URI, configuration.ObjectMeta.Name, response.StatusCode))
 	}
+	return nil
+}
+
+func ExecuteCallback(ctx context.Context, callback *operatorv1alpha1.Callbacks, configuration *operatorv1alpha1.ManagedNamespaceConfiguration) error {
+	log := logf.FromContext(ctx)
+	// init http client
+	callbaclClient := &http.Client{}
+	// ssl config
+	if len(callback.CACert) > 0 {
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM([]byte(callback.CACert))
+		callbaclClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: caCertPool,
+				},
+			},
+		}
+	}
+	// build request
+	method := "GET"
+	if len(callback.Method) > 0 {
+		method = callback.Method
+	}
+	request, err := http.NewRequest(method, callback.URI, nil)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed creating callback request of %s of configuration %s", callback.URI, configuration.Name))
+		return err
+	}
+	// http headers
+	for _, header := range callback.Headers {
+		request.Header.Add(header.Name, header.Value)
+	}
+	// execute
+	response, err := callbaclClient.Do(request)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed callback of %s of configuration %s", callback.URI, configuration.Name))
+		return err
+	}
+	// check status code
+	if (len(callback.SuccessCodes) == 0 && (response.StatusCode < 200 || response.StatusCode > 299)) || (len(callback.SuccessCodes) > 0 && !slices.Contains(callback.SuccessCodes, response.StatusCode)) {
+		statusCodeError := fmt.Errorf("error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.Name)
+		log.Error(statusCodeError, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.Name))
+		return statusCodeError
+	}
+	log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", callback.URI, configuration.Name, response.StatusCode))
 	return nil
 }
 

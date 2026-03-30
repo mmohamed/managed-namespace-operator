@@ -201,7 +201,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(errNS).NotTo(HaveOccurred())
 
 			refferedTo, found := namespace.Annotations[referredAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(refferedTo).To(Equal(resourceName))
 
 			rolebinding := &rbac.RoleBinding{}
@@ -212,15 +212,15 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(errRB).NotTo(HaveOccurred())
 
 			managedNamespaceAnnotationContent, found := rolebinding.Annotations[managedNamespaceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceConfigurationAnnotationContent, found := rolebinding.Annotations[managedNamespaceConfigurationAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceConfigurationAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceResourceAnnotationContent, found := rolebinding.Annotations[managedNamespaceResourceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceResourceAnnotationContent).To(Equal("rbac.authorization.k8s.io/v1/RoleBinding/admin-rolebiding"))
 
 			Expect(rolebinding.RoleRef.Kind).To(Equal("ClusterRole"))
@@ -228,7 +228,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(rolebinding.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
 
 			// check owner ref
-			Expect(len(rolebinding.GetOwnerReferences())).To(Equal(1))
+			Expect(rolebinding.GetOwnerReferences()).To(HaveLen(1))
 			Expect(rolebinding.GetOwnerReferences()[0].Kind).To(Equal("ManagedNamespace"))
 			Expect(rolebinding.GetOwnerReferences()[0].Name).To(Equal(resourceName))
 
@@ -241,19 +241,19 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(errCM).NotTo(HaveOccurred())
 
 			managedNamespaceAnnotationContent, found = configmap.Annotations[managedNamespaceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceConfigurationAnnotationContent, found = configmap.Annotations[managedNamespaceConfigurationAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceConfigurationAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceResourceAnnotationContent, found = configmap.Annotations[managedNamespaceResourceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceResourceAnnotationContent).To(Equal("v1/ConfigMap/mn-configmap"))
 
 			// check owner ref
-			Expect(len(configmap.GetOwnerReferences())).To(Equal(1))
+			Expect(configmap.GetOwnerReferences()).To(HaveLen(1))
 			Expect(configmap.GetOwnerReferences()[0].Kind).To(Equal("ManagedNamespace"))
 			Expect(configmap.GetOwnerReferences()[0].Name).To(Equal(resourceName))
 
@@ -268,15 +268,15 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(errCR).NotTo(HaveOccurred())
 
 			managedNamespaceAnnotationContent, found = clusterrole.Annotations[managedNamespaceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceConfigurationAnnotationContent, found = clusterrole.Annotations[managedNamespaceConfigurationAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceConfigurationAnnotationContent).To(Equal(resourceName))
 
 			managedNamespaceResourceAnnotationContent, found = clusterrole.Annotations[managedNamespaceResourceAnnotation]
-			Expect(found).To(Equal(true))
+			Expect(found).To(BeTrue())
 			Expect(managedNamespaceResourceAnnotationContent).To(Equal("rbac.authorization.k8s.io/v1/ClusterRole/mn-node-cluster-role"))
 
 			// check status
@@ -296,7 +296,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, resourceConfig)
 			Expect(err).NotTo(HaveOccurred())
 			// only managed namespace are reconciled
-			Expect(resourceConfig.Status.Conditions).To(HaveLen(0))
+			Expect(resourceConfig.Status.Conditions).To(BeEmpty())
 
 		})
 	})
