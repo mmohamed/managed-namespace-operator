@@ -257,11 +257,12 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 			Version: resource.Resource.ApiVersion,
 		})
 
-		rsSelector := client.ObjectKey{Namespace: namespace.ObjectMeta.Name, Name: resource.Resource.Name}
+		rsName := fmt.Sprintf("%s-%s", resource.Resource.Name, namespace.ObjectMeta.Name)
+		rsSelector := client.ObjectKey{Namespace: namespace.ObjectMeta.Name, Name: rsName}
 		if len(resource.Resource.Namespace) > 0 {
-			rsSelector = client.ObjectKey{Namespace: resource.Resource.Namespace, Name: resource.Resource.Name}
+			rsSelector = client.ObjectKey{Namespace: resource.Resource.Namespace, Name: rsName}
 		} else if resource.Resource.ClusterResource == true {
-			rsSelector = client.ObjectKey{Name: resource.Resource.Name}
+			rsSelector = client.ObjectKey{Name: rsName}
 		}
 		newOne := false
 		// check if exist
@@ -293,7 +294,7 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 
 		rs.Object = map[string]any{
 			"metadata": map[string]any{
-				"name": resource.Resource.Name,
+				"name": rsName,
 				"annotations": map[string]any{
 					managedNamespaceConfigurationAnnotation: configuration.ObjectMeta.Name,
 					managedNamespaceAnnotation:              namespace.ObjectMeta.Name,

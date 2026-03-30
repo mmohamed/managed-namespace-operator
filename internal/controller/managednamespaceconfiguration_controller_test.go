@@ -33,14 +33,20 @@ import (
 var _ = Describe("ManagedNamespaceConfiguration Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
+		const invalidResourceName = "invalid-test-resource"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
+
+		typeNamespacedNameInvalid := types.NamespacedName{
+			Name: invalidResourceName,
+		}
+
 		managednamespaceconfiguration := &operatorv1alpha1.ManagedNamespaceConfiguration{}
+		invalidmanagednamespaceconfiguration := &operatorv1alpha1.ManagedNamespaceConfiguration{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind ManagedNamespaceConfiguration")
@@ -48,23 +54,50 @@ var _ = Describe("ManagedNamespaceConfiguration Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &operatorv1alpha1.ManagedNamespaceConfiguration{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			}
+
+			err = k8sClient.Get(ctx, typeNamespacedNameInvalid, invalidmanagednamespaceconfiguration)
+			if err != nil && errors.IsNotFound(err) {
+				invalidResource := &operatorv1alpha1.ManagedNamespaceConfiguration{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: invalidResourceName,
+					},
+					Spec: operatorv1alpha1.ManagedNamespaceConfigurationSpec{
+						Suspended: false,
+						Resources: []operatorv1alpha1.Resources{
+							{
+								Resource: operatorv1alpha1.Resource{
+									Kind:       "RoleBinding",
+									ApiVersion: "rbac.authorization.k8s.io/v1",
+									Name:       "admin-rolebiding",
+								},
+								Content: string("a=b"),
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, invalidResource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &operatorv1alpha1.ManagedNamespaceConfiguration{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance ManagedNamespaceConfiguration")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			invalidResource := &operatorv1alpha1.ManagedNamespaceConfiguration{}
+			err = k8sClient.Get(ctx, typeNamespacedNameInvalid, invalidResource)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the specific resource instance ManagedNamespaceConfiguration")
+			Expect(k8sClient.Delete(ctx, invalidResource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
@@ -77,8 +110,37 @@ var _ = Describe("ManagedNamespaceConfiguration Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			resourceConfig := &operatorv1alpha1.ManagedNamespaceConfiguration{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resourceConfig)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(resourceConfig.Status.Conditions).To(HaveLen(2))
+			var conditions []metav1.Condition
+			Expect(resourceConfig.Status.Conditions).To(ContainElement(
+				HaveField("Type", Equal("Available")), &conditions))
+			Expect(conditions).To(HaveLen(1))
+			Expect(conditions[0].Status).To(Equal(metav1.ConditionTrue))
+			Expect(conditions[0].Reason).To(Equal("Available"))
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedNameInvalid,
+			})
+			// invalid resource put error statut without returning error
+			// to avoid reconcile with same configuration
+			Expect(err).NotTo(HaveOccurred())
+
+			invalidResourceConfig := &operatorv1alpha1.ManagedNamespaceConfiguration{}
+			err = k8sClient.Get(ctx, typeNamespacedNameInvalid, invalidResourceConfig)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(invalidResourceConfig.Status.Conditions).To(HaveLen(2))
+			var invalidConditions []metav1.Condition
+			Expect(invalidResourceConfig.Status.Conditions).To(ContainElement(
+				HaveField("Type", Equal("Degraded")), &invalidConditions))
+			Expect(invalidConditions).To(HaveLen(1))
+			Expect(invalidConditions[0].Status).To(Equal(metav1.ConditionFalse))
+			Expect(invalidConditions[0].Reason).To(Equal("ReconciliationError"))
 		})
 	})
 })

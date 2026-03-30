@@ -139,6 +139,11 @@ func (r *ManagedNamespaceConfigurationReconciler) Reconcile(ctx context.Context,
 		}
 	}
 
+	// re-fetch
+	if err := r.Get(ctx, req.NamespacedName, &managedNamespaceConfiguration); err != nil {
+		log.Error(err, "Failed to re-fetch ManagedNamespaceConfiguration")
+		return ctrl.Result{}, err
+	}
 	meta.SetStatusCondition(&managedNamespaceConfiguration.Status.Conditions, metav1.Condition{
 		Type:    typeAvailableManagedNamespaceConfiguration,
 		Status:  metav1.ConditionTrue,
