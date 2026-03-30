@@ -69,8 +69,8 @@ var (
 // +kubebuilder:rbac:groups=operator.medinvention.io,resources=managednamespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.medinvention.io,resources=managednamespaces/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.medinvention.io,resources=managednamespaces/finalizers,verbs=update
-// +kubebuilder:rbac:resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:resources=namespaces/status,verbs=get
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=namespaces/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
