@@ -97,7 +97,7 @@ func (r *ManagedNamespaceConfigurationReconciler) Reconcile(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		// last sync time
-		patch := []byte(fmt.Sprintf(`{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339)))
+		patch := fmt.Appendf(nil, `{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339))
 		if statusErr := r.Status().Patch(ctx, &managedNamespaceConfiguration, client.RawPatch(types.MergePatchType, patch)); statusErr != nil {
 			log.Error(statusErr, "Failed to update ManagedNamespaceConfiguration status last sync time")
 			return ctrl.Result{}, statusErr
@@ -109,7 +109,7 @@ func (r *ManagedNamespaceConfigurationReconciler) Reconcile(ctx context.Context,
 		}
 	}
 
-	if managedNamespaceConfiguration.Spec.Suspended == true {
+	if managedNamespaceConfiguration.Spec.Suspended {
 		return ctrl.Result{}, nil
 	}
 
@@ -160,7 +160,7 @@ func (r *ManagedNamespaceConfigurationReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 	// last sync time
-	patch := []byte(fmt.Sprintf(`{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339)))
+	patch := fmt.Appendf(nil, `{"status":{"lastSyncTime":"%s"}}`, time.Now().Format(time.RFC3339))
 	if statusErr := r.Status().Patch(ctx, &managedNamespaceConfiguration, client.RawPatch(types.MergePatchType, patch)); statusErr != nil {
 		log.Error(statusErr, "Failed to update ManagedNamespaceConfiguration status last sync time")
 		return ctrl.Result{}, statusErr
