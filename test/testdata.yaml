@@ -168,6 +168,5 @@ kind: ManagedNamespace
 apiVersion: operator.medinvention.io/v1alpha1
 metadata:
     name: project
-spec: {}
 
 ---

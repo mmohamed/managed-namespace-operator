@@ -1,8 +1,11 @@
-# managed-namespace
-// TODO(user): Add simple overview of use/purpose
+# Managed Namespace Kubernetes Operator
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+A Kubernetes operator can be designed to enable cluster administrators to delegate namespace-level management to individual users while maintaining strict isolation across the cluster. This operator automates the creation and configuration of dedicated namespaces for each user, along with the appropriate Role-Based Access Control (RBAC) policies.
+
+With this approach, users are granted full administrative control over their own namespace, allowing them to deploy, manage, and scale applications independently. At the same time, access to other namespaces in the cluster is strictly restricted, ensuring security and multi-tenancy.
+
+The operator continuously enforces these access rules and can automatically reconcile any configuration drift, ensuring that permissions remain compliant with the intended policies. This provides a scalable and secure way to empower users without compromising the integrity of the overall cluster.
 
 ## Getting Started
 
@@ -89,7 +92,7 @@ Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
 the project, i.e.:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/managed-namespace/<tag or branch>/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/mmohamed/managed-namespace/<tag or branch>/dist/install.yaml
 ```
 
 ### By providing a Helm Chart
@@ -109,9 +112,6 @@ if you create webhooks, you need to use the above command with
 the '--force' flag and manually ensure that any custom configuration
 previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
 is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 

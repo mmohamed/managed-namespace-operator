@@ -1,0 +1,30 @@
+{{- if .Values.rbacHelpers.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "managed-namespace.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "managed-namespace.resourceName" (dict "suffix" "managednamespace-editor-role" "context" $) }}
+rules:
+- apiGroups:
+  - operator.medinvention.io
+  resources:
+  - managednamespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.medinvention.io
+  resources:
+  - managednamespaces/status
+  verbs:
+  - get
+{{- end }}
