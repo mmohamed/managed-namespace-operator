@@ -86,6 +86,22 @@ helm upgrade --install managed-namespace dist/chart \
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant the `managed-namespace-controller-manager` service account the necessary permissions to allow the controller to install all resources defined in `ManagedNamespaceConfiguration` resources.
+```sh
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: managed-namespace-controller-manager-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: managed-namespace-controller-manager
+  namespace: managed-namespace-system
+EOF
+```
 
 ## Usage from source
 
