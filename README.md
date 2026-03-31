@@ -7,7 +7,87 @@ With this approach, users are granted full administrative control over their own
 
 The operator continuously enforces these access rules and can automatically reconcile any configuration drift, ensuring that permissions remain compliant with the intended policies. This provides a scalable and secure way to empower users without compromising the integrity of the overall cluster.
 
-## Getting Started
+## Concept and configuration
+
+### How it's work
+When a cluster administrator grants a user permission to manage `ManagedNamespace` resources, a `Namespace` with the same name will be created for each `ManagedNamespace` created by the user. Additionally, the controller will create all resources defined by the administrator through `ManagedNamespaceConfiguration` resources and will execute all callbacks during every reconciliation process.
+
+### Configuration
+
+## Resources
+Resources example : A new RoleBinding will be created within each new `ManagedNamespace`, and a copy of the ConfigMap (mn-configmap-xxx) will be created in the default namespace for each `ManagedNamespace`. This also works with cluster-wide resources.
+
+```yaml
+kind: ManagedNamespaceConfiguration
+apiVersion: operator.medinvention.io/v1alpha1
+metadata:
+    name: main-config
+spec:
+    resources:
+        - resource: 
+            kind: RoleBinding
+            apiVersion: rbac.authorization.k8s.io/v1
+            name: admin-rolebiding
+          content: |
+            roleRef:
+                kind: ClusterRole
+                name: cluster-admin
+                apiGroup: rbac.authorization.k8s.io
+            subjects:
+                - kind: Group
+                  name: project-group
+        - resource: 
+            kind: ConfigMap
+            apiVersion: v1
+            name: mn-configmap
+            namespace: default
+          content: |
+            metadata:
+                annotations:
+                    annotations/description: annotation-content
+                labels:
+                    labels/description: label-content
+            data:
+                dbname: dbname
+                path : "/"
+```
+
+## Callbacks
+Callbacks example : For each reconciliation process of a `ManagedNamespace`, a callback will be executed.
+
+```yaml
+kind: ManagedNamespaceConfiguration
+apiVersion: operator.medinvention.io/v1alpha1
+metadata:
+    name: main-config
+spec:
+    callbacks:
+        - uri: "https://www.google.com"
+          method: "GET"
+          successcodes: [200, 201]
+          headers:
+            - name: CUSTOM_HTTP_HEADER
+              value: custom-http-header-value
+          cacert: | 
+            -----BEGIN CERTIFICATE-----
+            xxxxxxxxxxxxxxxxxxxxxx
+```
+
+## Usage helm chart
+
+```sh
+helm upgrade --install managed-namespace dist/chart \
+    --namespace managed-namespace-system \
+    --create-namespace \
+    --set manager.image.repository=medinvention/managed-namespace \
+    --set manager.image.tag=dev \
+    --wait \
+    --timeout 5m 
+```
+
+> **NOTE**: If you encounter RBAC errors, you may need to grant the `managed-namespace-controller-manager` service account the necessary permissions to allow the controller to install all resources defined in `ManagedNamespaceConfiguration` resources.
+
+## Usage from source
 
 ### Prerequisites
 - go version v1.24.6+
@@ -15,103 +95,41 @@ The operator continuously enforces these access rules and can automatically reco
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+
+### Deploy on the cluster 
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/managed-namespace:tag
-```
-
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
-
-```sh
+# To Deploy on the cluster
+make docker-buildx docker-push IMG=medinvention/managed-namespace:dev
+# Install the CRDs into the cluster (make manifests for generation)
 make install
-```
-
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
-```sh
-make deploy IMG=<some-registry>/managed-namespace:tag
-```
-
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
+# Deploy 
+make deploy IMG=medinvention/managed-namespace:dev
+# Apply sample
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
+### Distribution
 
 ```sh
+# Build the installer YAML File
+make build-installer IMG=medinvention/managed-namespace:dev
+# Apply manifest
+kubectl apply -f https://raw.githubusercontent.com/mmohamed/managed-namespace/dev/dist/install.yaml
+# Build Helm chart
+kubebuilder edit --plugins=helm/v2-alpha # chart will be generated under 'dist/chart'
+```
+
+### Cleanup
+
+```sh
+# Delete the instances (CRs) from the cluster
 kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
+# Delete the APIs(CRDs) from the cluster
 make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
+# UnDeploy the controller from the cluster
 make undeploy
 ```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/managed-namespace:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/mmohamed/managed-namespace/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
@@ -132,4 +150,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
