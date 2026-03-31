@@ -679,7 +679,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: controller:latest
+        image: medinvention/managed-namespace:0.0.1
         livenessProbe:
           httpGet:
             path: /healthz
