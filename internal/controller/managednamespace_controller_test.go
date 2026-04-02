@@ -302,6 +302,30 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			// only managed namespace are reconciled
 			Expect(resourceConfig.Status.Conditions).To(BeEmpty())
 
+			// Update config
+			resourceConfigMapContent, _ := yaml.Marshal(map[string]any{
+				"data": map[string]any{
+					"dbname": "dbname",
+					"path":   "/",
+				},
+			})
+			resourceConfig.Spec.Resources[1].Content = string(resourceConfigMapContent)
+
+			Expect(k8sClient.Update(ctx, resourceConfig)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			errCM = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "mn-configmap-" + resourceName,
+				Namespace: "default",
+			}, configmap)
+			Expect(errCM).NotTo(HaveOccurred())
+
+			// check data
+			Expect(configmap.Data["dbname"]).To(Equal("dbname"))
 		})
 	})
 })

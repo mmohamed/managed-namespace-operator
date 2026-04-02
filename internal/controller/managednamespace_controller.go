@@ -292,17 +292,17 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 				log.Error(nil, fmt.Sprintf("Unmanaged resource %s of configuration %s already found !", resource.Resource.Name, configuration.Name))
 				return fmt.Errorf("unmanaged resource %s of configuration %s already found", resource.Resource.Name, configuration.Name)
 			}
-		}
-
-		rs.Object = map[string]any{
-			"metadata": map[string]any{
-				"name": rsName,
-				"annotations": map[string]any{
-					managedNamespaceConfigurationAnnotation: configuration.Name,
-					managedNamespaceAnnotation:              namespace.Name,
-					managedNamespaceResourceAnnotation:      fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name),
+		} else {
+			rs.Object = map[string]any{
+				"metadata": map[string]any{
+					"name": rsName,
+					"annotations": map[string]any{
+						managedNamespaceConfigurationAnnotation: configuration.Name,
+						managedNamespaceAnnotation:              namespace.Name,
+						managedNamespaceResourceAnnotation:      fmt.Sprintf("%s/%s/%s", resource.Resource.ApiVersion, resource.Resource.Kind, resource.Resource.Name),
+					},
 				},
-			},
+			}
 		}
 
 		rs.Object = mergemap.Merge(rs.Object, out)
