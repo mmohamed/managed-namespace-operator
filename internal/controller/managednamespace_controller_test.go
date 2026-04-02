@@ -77,7 +77,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 						},
 					},
 					"data": map[string]any{
-						"dbname": "dbname",
+						"dbname": "dbname-__TARGET__",
 						"path":   "/",
 					},
 				})
@@ -143,13 +143,17 @@ var _ = Describe("ManagedNamespace Controller", func() {
 						},
 						Callbacks: []operatorv1alpha1.Callbacks{
 							{
-								URI:          "https://www.google.com",
+								URI:          "https://www.google.com?target=__TARGET__",
 								Method:       "GET",
 								SuccessCodes: []int{200, 201},
 								Headers: []operatorv1alpha1.HTTPHeader{
 									{
 										Name:  "CUSTOM_HTTP_HEADER",
 										Value: "custom-http-header-value",
+									},
+									{
+										Name:  "CUSTOM_HTTP_HEADER_WITH_TARGET",
+										Value: "custom-http-header-value-__TARGET__",
 									},
 								},
 								CACert: string(cacert),
@@ -258,7 +262,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			Expect(configmap.GetOwnerReferences()[0].Name).To(Equal(resourceName))
 
 			// check data
-			Expect(configmap.Data["dbname"]).To(Equal("dbname"))
+			Expect(configmap.Data["dbname"]).To(Equal("dbname-" + resourceName))
 
 			// check clusterrole
 			clusterrole := &rbac.ClusterRole{}
