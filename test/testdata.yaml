@@ -45,15 +45,17 @@ spec:
                 labels:
                     labels/description: label-content
             data:
-                dbname: dbname
+                dbname: dbname-__TARGET__
                 path : "/"
     callbacks:
-        - uri: "https://www.google.com"
+        - uri: "https://www.google.com?target=__TARGET__"
           method: "GET"
           successcodes: [200, 201]
           headers:
             - name: CUSTOM_HTTP_HEADER
               value: custom-http-header-value
+            - name: CUSTOM_HTTP_HEADER_WITH_TARGET
+              value: custom-http-header-value-__TARGET__
           cacert: | 
             -----BEGIN CERTIFICATE-----
             MIIONjCCDR6gAwIBAgIQHPsd95mzo2EQ05uOfTyoUzANBgkqhkiG9w0BAQsFADA7

@@ -11,6 +11,14 @@ The operator continuously enforces these access rules and can automatically reco
 
 ### How it's work
 When a cluster administrator grants a user permission to manage `ManagedNamespace` resources, a `Namespace` with the same name will be created for each `ManagedNamespace` created by the user. Additionally, the controller will create all resources defined by the administrator through `ManagedNamespaceConfiguration` resources and will execute all callbacks during every reconciliation process.
+In case of, the new created resources need to be linked to the target namespace, a slug `__TARGET__` can be used in resources content and callback URI / HTTP Header value, the it will to be replaced with target `ManagedNamespace`
+
+```yaml
+kind: ManagedNamespace
+apiVersion: operator.medinvention.io/v1alpha1
+metadata:
+    name: myproject
+```
 
 ### Configuration
 
@@ -48,7 +56,7 @@ spec:
                 labels:
                     labels/description: label-content
             data:
-                dbname: dbname
+                dbname: dbname-__TARGET__
                 path : "/"
 ```
 
@@ -62,12 +70,14 @@ metadata:
     name: main-config
 spec:
     callbacks:
-        - uri: "https://www.google.com"
+        - uri: "https://www.google.com?target=__TARGET__"
           method: "GET"
           successcodes: [200, 201]
           headers:
             - name: CUSTOM_HTTP_HEADER
               value: custom-http-header-value
+            - name: CUSTOM_HTTP_HEADER_WITH_TARGET
+              value: custom-http-header-value-__TARGET__
           cacert: | 
             -----BEGIN CERTIFICATE-----
             xxxxxxxxxxxxxxxxxxxxxx

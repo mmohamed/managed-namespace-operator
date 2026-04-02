@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -64,6 +65,7 @@ var (
 	managedNamespaceConfigurationAnnotation = "managednamespace.operator.medinvention.io/managednamespaceconfiguration"
 	managedNamespaceAnnotation              = "managednamespace.operator.medinvention.io/managednamespace"
 	managedNamespaceResourceAnnotation      = "managednamespace.operator.medinvention.io/managednamespaceresource"
+	targetSlug                              = "__TARGET__"
 )
 
 // +kubebuilder:rbac:groups=operator.medinvention.io,resources=managednamespaces,verbs=get;list;watch;create;update;patch;delete
@@ -247,7 +249,7 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 	for _, resource := range configuration.Spec.Resources {
 		type Data map[string]any
 		out := Data{}
-		if err := yaml.Unmarshal([]byte(resource.Content), &out); err != nil {
+		if err := yaml.Unmarshal([]byte(strings.ReplaceAll(resource.Content, targetSlug, namespace.Name)), &out); err != nil {
 			log.Error(err, fmt.Sprintf("Unable to decode YAML content of resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 			return err
 		}
@@ -337,14 +339,14 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 	}
 	// callbacks
 	for _, callback := range configuration.Spec.Callbacks {
-		if err := ExecuteCallback(ctx, &callback, configuration); err != nil {
+		if err := ExecuteCallback(ctx, &callback, configuration, namespace); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func ExecuteCallback(ctx context.Context, callback *operatorv1alpha1.Callbacks, configuration *operatorv1alpha1.ManagedNamespaceConfiguration) error {
+func ExecuteCallback(ctx context.Context, callback *operatorv1alpha1.Callbacks, configuration *operatorv1alpha1.ManagedNamespaceConfiguration, namespace *corev1.Namespace) error {
 	log := logf.FromContext(ctx)
 	// init http client
 	callbaclClient := &http.Client{}
@@ -365,28 +367,29 @@ func ExecuteCallback(ctx context.Context, callback *operatorv1alpha1.Callbacks, 
 	if len(callback.Method) > 0 {
 		method = callback.Method
 	}
-	request, err := http.NewRequest(method, callback.URI, nil)
+	uri := strings.ReplaceAll(callback.URI, targetSlug, namespace.Name)
+	request, err := http.NewRequest(method, uri, nil)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed creating callback request of %s of configuration %s", callback.URI, configuration.Name))
+		log.Error(err, fmt.Sprintf("Failed creating callback request of %s of configuration %s", uri, configuration.Name))
 		return err
 	}
 	// http headers
 	for _, header := range callback.Headers {
-		request.Header.Add(header.Name, header.Value)
+		request.Header.Add(header.Name, strings.ReplaceAll(header.Value, targetSlug, namespace.Name))
 	}
 	// execute
 	response, err := callbaclClient.Do(request)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed callback of %s of configuration %s", callback.URI, configuration.Name))
+		log.Error(err, fmt.Sprintf("Failed callback of %s of configuration %s", uri, configuration.Name))
 		return err
 	}
 	// check status code
 	if (len(callback.SuccessCodes) == 0 && (response.StatusCode < 200 || response.StatusCode > 299)) || (len(callback.SuccessCodes) > 0 && !slices.Contains(callback.SuccessCodes, response.StatusCode)) {
-		statusCodeError := fmt.Errorf("error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.Name)
-		log.Error(statusCodeError, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, callback.URI, configuration.Name))
+		statusCodeError := fmt.Errorf("error response code %d of callback of %s of configuration %s", response.StatusCode, uri, configuration.Name)
+		log.Error(statusCodeError, fmt.Sprintf("Error response code %d of callback of %s of configuration %s", response.StatusCode, uri, configuration.Name))
 		return statusCodeError
 	}
-	log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", callback.URI, configuration.Name, response.StatusCode))
+	log.Info(fmt.Sprintf("Success callback of %s of configuration %s with response code %d", uri, configuration.Name, response.StatusCode))
 	return nil
 }
 
