@@ -19,6 +19,8 @@ spec:
     kind: ManagedNamespaceConfiguration
     listKind: ManagedNamespaceConfigurationList
     plural: managednamespaceconfigurations
+    shortNames:
+    - mnc
     singular: managednamespaceconfiguration
   scope: Cluster
   versions:
@@ -204,6 +206,8 @@ spec:
     kind: ManagedNamespace
     listKind: ManagedNamespaceList
     plural: managednamespaces
+    shortNames:
+    - mn
     singular: managednamespace
   scope: Cluster
   versions:
@@ -679,7 +683,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: medinvention/managed-namespace:0.0.1
+        image: controller:latest
         livenessProbe:
           httpGet:
             path: /healthz

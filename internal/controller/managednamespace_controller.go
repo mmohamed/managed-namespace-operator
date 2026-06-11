@@ -123,15 +123,17 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err := r.Get(ctx, client.ObjectKey{Name: req.Name}, &namespace); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info(fmt.Sprintf("Namespace '%s' not found, Creating...", req.Name))
-
+			// copy annotations from managed namespace
+			annotations := map[string]any{referredAnnotation: req.Name}
+			for k, v := range managedNamespace.ObjectMeta.DeepCopy().Annotations {
+				annotations[k] = v
+			}
 			ns := &unstructured.Unstructured{}
 			ns.Object = map[string]any{
 				"metadata": map[string]any{
-					"name": req.Name,
-					"annotations": map[string]any{
-						referredAnnotation: req.Name,
-					},
-					"labels": managedNamespace.ObjectMeta.DeepCopy().Labels,
+					"name":        req.Name,
+					"annotations": annotations,
+					"labels":      managedNamespace.ObjectMeta.DeepCopy().Labels, // copy labels from managed namespace
 				},
 				"spec": map[string]any{},
 			}
@@ -188,7 +190,15 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 	log.Info(fmt.Sprintf("Namespace '%s' found, updating resources...", req.Name))
+	// copy annotations from managed namespace
+	copyAnnotations := map[string]string{}
+	for k, v := range managedNamespace.ObjectMeta.DeepCopy().Annotations {
+		copyAnnotations[k] = v
+	}
+	copyAnnotations[referredAnnotation] = req.Name
 	namespace.SetLabels(managedNamespace.ObjectMeta.DeepCopy().Labels)
+	namespace.SetAnnotations(copyAnnotations)
+
 	if err := r.Update(ctx, &namespace); err != nil {
 		log.Error(err, "Failed to copy labels / annotations to namespace")
 		return ctrl.Result{}, err
@@ -404,7 +414,7 @@ func ExecuteCallback(ctx context.Context, callback *operatorv1alpha1.Callbacks, 
 func (r *ManagedNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ManagedNamespace{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}, predicate.LabelChangedPredicate{})).
 		Named("managednamespace").
 		Owns(&corev1.Namespace{}).
 		Complete(r)

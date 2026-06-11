@@ -12,8 +12,8 @@ manager:
   replicas: 1
 
   image:
-    repository: medinvention/managed-namespace
-    # tag: default app-version
+    repository: controller
+    tag: latest
     pullPolicy: IfNotPresent
 
   ## Arguments
