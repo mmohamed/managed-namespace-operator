@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -192,9 +193,7 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log.Info(fmt.Sprintf("Namespace '%s' found, updating resources...", req.Name))
 	// copy annotations from managed namespace
 	copyAnnotations := map[string]string{}
-	for k, v := range managedNamespace.ObjectMeta.DeepCopy().Annotations {
-		copyAnnotations[k] = v
-	}
+	maps.Copy(copyAnnotations, managedNamespace.ObjectMeta.DeepCopy().Annotations)
 	copyAnnotations[referredAnnotation] = req.Name
 	namespace.SetLabels(managedNamespace.ObjectMeta.DeepCopy().Labels)
 	namespace.SetAnnotations(copyAnnotations)
