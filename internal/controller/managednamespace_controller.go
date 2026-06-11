@@ -131,6 +131,7 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					"annotations": map[string]any{
 						referredAnnotation: req.Name,
 					},
+					"labels": managedNamespace.ObjectMeta.DeepCopy().Labels,
 				},
 				"spec": map[string]any{},
 			}
@@ -187,6 +188,12 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 	log.Info(fmt.Sprintf("Namespace '%s' found, updating resources...", req.Name))
+	namespace.SetLabels(managedNamespace.ObjectMeta.DeepCopy().Labels)
+	if err := r.Update(ctx, &namespace); err != nil {
+		log.Error(err, "Failed to copy labels / annotations to namespace")
+		return ctrl.Result{}, err
+	}
+
 	var configurations operatorv1alpha1.ManagedNamespaceConfigurationList
 	if err := r.List(ctx, &configurations); err != nil {
 		log.Error(err, "Unable to list ManagedNamespaceConfiguration")
