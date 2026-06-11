@@ -10,7 +10,7 @@ The operator continuously enforces these access rules and can automatically reco
 ## Concept and configuration
 
 ### How it's work
-When a cluster administrator grants a user permission to manage `ManagedNamespace` resources, a `Namespace` with the same name will be created for each `ManagedNamespace` created by the user. Additionally, the controller will create all resources defined by the administrator through `ManagedNamespaceConfiguration` resources and will execute all callbacks during every reconciliation process.
+When a cluster administrator grants a user permission to manage `ManagedNamespace` resources, a `Namespace` with the same name will be created for each `ManagedNamespace` created by the user having also a copy of all annotations and labels. Additionally, the controller will create all resources defined by the administrator through `ManagedNamespaceConfiguration` resources and will execute all callbacks during every reconciliation process.
 In case of, the new created resources need to be linked to the target namespace, a slug `__TARGET__` can be used in resources content and callback URI / HTTP Header value, the it will to be replaced with target `ManagedNamespace`
 
 ```yaml
@@ -18,6 +18,10 @@ kind: ManagedNamespace
 apiVersion: operator.medinvention.io/v1alpha1
 metadata:
     name: myproject
+    labels: 
+      my-project-label: hot-project
+    annotations:
+      my-project-annotation: hot-project
 ```
 
 ### Configuration

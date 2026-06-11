@@ -170,5 +170,9 @@ kind: ManagedNamespace
 apiVersion: operator.medinvention.io/v1alpha1
 metadata:
     name: project
+    labels: 
+      my-project-label: hot-project
+    annotations:
+      my-project-annotation: hot-project
 
 ---
