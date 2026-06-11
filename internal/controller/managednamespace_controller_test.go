@@ -38,6 +38,8 @@ import (
 var _ = Describe("ManagedNamespace Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
+		const resourceAnnotation = "test-annotation"
+		const resourceLabel = "test-label"
 
 		ctx := context.Background()
 
@@ -168,7 +170,9 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &operatorv1alpha1.ManagedNamespace{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: resourceName,
+						Name:        resourceName,
+						Labels:      map[string]string{resourceLabel: resourceName},
+						Annotations: map[string]string{resourceAnnotation: resourceName},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -207,6 +211,14 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			refferedTo, found := namespace.Annotations[referredAnnotation]
 			Expect(found).To(BeTrue())
 			Expect(refferedTo).To(Equal(resourceName))
+
+			namespaceAnnotation, found := namespace.Annotations[resourceAnnotation]
+			Expect(found).To(BeTrue())
+			Expect(namespaceAnnotation).To(Equal(resourceName))
+
+			namespaceLabel, found := namespace.Labels[resourceLabel]
+			Expect(found).To(BeTrue())
+			Expect(namespaceLabel).To(Equal(resourceName))
 
 			rolebinding := &rbac.RoleBinding{}
 			errRB := k8sClient.Get(ctx, types.NamespacedName{
@@ -302,6 +314,30 @@ var _ = Describe("ManagedNamespace Controller", func() {
 			// only managed namespace are reconciled
 			Expect(resourceConfig.Status.Conditions).To(BeEmpty())
 
+			// Update config
+			resourceConfigMapContent, _ := yaml.Marshal(map[string]any{
+				"data": map[string]any{
+					"dbname": "dbname",
+					"path":   "/",
+				},
+			})
+			resourceConfig.Spec.Resources[1].Content = string(resourceConfigMapContent)
+
+			Expect(k8sClient.Update(ctx, resourceConfig)).To(Succeed())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			errCM = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "mn-configmap-" + resourceName,
+				Namespace: "default",
+			}, configmap)
+			Expect(errCM).NotTo(HaveOccurred())
+
+			// check data
+			Expect(configmap.Data["dbname"]).To(Equal("dbname"))
 		})
 	})
 })
