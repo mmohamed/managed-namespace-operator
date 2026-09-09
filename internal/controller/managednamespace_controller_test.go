@@ -116,6 +116,10 @@ var _ = Describe("ManagedNamespace Controller", func() {
 					},
 					Spec: operatorv1alpha1.ManagedNamespaceConfigurationSpec{
 						Suspended: false,
+						PSS: operatorv1alpha1.PSSConfiguration{
+							Enforce:     "restricted",
+							WarnVersion: "latest",
+						},
 						Resources: []operatorv1alpha1.Resources{
 							{
 								Resource: operatorv1alpha1.Resource{
@@ -171,7 +175,7 @@ var _ = Describe("ManagedNamespace Controller", func() {
 				resource := &operatorv1alpha1.ManagedNamespace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        resourceName,
-						Labels:      map[string]string{resourceLabel: resourceName},
+						Labels:      map[string]string{resourceLabel: resourceName, "pod-security.kubernetes.io/audit": "baseline"},
 						Annotations: map[string]string{resourceAnnotation: resourceName},
 					},
 				}
@@ -218,6 +222,10 @@ var _ = Describe("ManagedNamespace Controller", func() {
 
 			namespaceLabel, found := namespace.Labels[resourceLabel]
 			Expect(found).To(BeTrue())
+			Expect(namespace.Labels).To(HaveLen(4))
+			Expect(namespace.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/enforce", "restricted"))
+			Expect(namespace.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/warn-version", "latest"))
+			Expect(namespace.Labels).NotTo(HaveKey("pod-security.kubernetes.io/audit"))
 			Expect(namespaceLabel).To(Equal(resourceName))
 
 			rolebinding := &rbac.RoleBinding{}

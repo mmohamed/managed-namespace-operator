@@ -73,6 +73,22 @@ spec:
                   - uri
                   type: object
                 type: array
+              pssconfiguration:
+                description: Resources defines an PSS Configuration for managed namespace.
+                properties:
+                  audit:
+                    type: string
+                  auditVersion:
+                    type: string
+                  enforce:
+                    type: string
+                  enforceVersion:
+                    type: string
+                  warn:
+                    type: string
+                  warnVersion:
+                    type: string
+                type: object
               resources:
                 items:
                   description: Resources defines the list of managed resource.

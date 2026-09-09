@@ -134,7 +134,7 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				"metadata": map[string]any{
 					"name":        req.Name,
 					"annotations": annotations,
-					"labels":      managedNamespace.ObjectMeta.DeepCopy().Labels, // copy labels from managed namespace
+					"labels":      copyLabels(&managedNamespace),
 				},
 				"spec": map[string]any{},
 			}
@@ -191,11 +191,22 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 	log.Info(fmt.Sprintf("Namespace '%s' found, updating resources...", req.Name))
+
+	var configurations operatorv1alpha1.ManagedNamespaceConfigurationList
+	if err := r.List(ctx, &configurations); err != nil {
+		log.Error(err, "Unable to list ManagedNamespaceConfiguration")
+		return ctrl.Result{}, err
+	}
+
 	// copy annotations from managed namespace
 	copyAnnotations := map[string]string{}
 	maps.Copy(copyAnnotations, managedNamespace.ObjectMeta.DeepCopy().Annotations)
 	copyAnnotations[referredAnnotation] = req.Name
-	namespace.SetLabels(managedNamespace.ObjectMeta.DeepCopy().Labels)
+	// copy labels from managed namespace (ignore PSS labels)
+	labels := copyLabels(&managedNamespace)
+	// merge with PSS Label from configurations
+	maps.Copy(labels, getPSSLabelsFromActivesConfigurations(configurations))
+	namespace.SetLabels(labels)
 	namespace.SetAnnotations(copyAnnotations)
 
 	if err := r.Update(ctx, &namespace); err != nil {
@@ -203,11 +214,6 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	var configurations operatorv1alpha1.ManagedNamespaceConfigurationList
-	if err := r.List(ctx, &configurations); err != nil {
-		log.Error(err, "Unable to list ManagedNamespaceConfiguration")
-		return ctrl.Result{}, err
-	}
 	for _, configuration := range configurations.Items {
 		if err := r.ApplyConfiguration(ctx, &managedNamespace, &configuration, &namespace); err != nil {
 			log.Error(err, fmt.Sprintf("Unable to apply ManagedNamespaceConfiguration %s", configuration.Name))
@@ -251,6 +257,43 @@ func (r *ManagedNamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	log.Info(fmt.Sprintf("All configuration are applied to namespace '%s'", req.Name))
 
 	return ctrl.Result{}, nil
+}
+
+func copyLabels(managedNamespace *operatorv1alpha1.ManagedNamespace) map[string]string {
+	labels := map[string]string{}
+	for k, v := range managedNamespace.ObjectMeta.DeepCopy().Labels {
+		if !strings.Contains(k, "pod-security.kubernetes.io") {
+			labels[k] = v
+		}
+	}
+	return labels
+}
+
+func getPSSLabelsFromActivesConfigurations(configurations operatorv1alpha1.ManagedNamespaceConfigurationList) map[string]string {
+	labels := map[string]string{}
+	for _, configuration := range configurations.Items {
+		if !configuration.Spec.Suspended {
+			if len(configuration.Spec.PSS.Enforce) > 0 {
+				labels["pod-security.kubernetes.io/enforce"] = configuration.Spec.PSS.Enforce
+			}
+			if len(configuration.Spec.PSS.EnforceVersion) > 0 {
+				labels["pod-security.kubernetes.io/enforce-version"] = configuration.Spec.PSS.EnforceVersion
+			}
+			if len(configuration.Spec.PSS.Audit) > 0 {
+				labels["pod-security.kubernetes.io/audit"] = configuration.Spec.PSS.Audit
+			}
+			if len(configuration.Spec.PSS.AuditVersion) > 0 {
+				labels["pod-security.kubernetes.io/audit-version"] = configuration.Spec.PSS.AuditVersion
+			}
+			if len(configuration.Spec.PSS.Warn) > 0 {
+				labels["pod-security.kubernetes.io/warn"] = configuration.Spec.PSS.Warn
+			}
+			if len(configuration.Spec.PSS.WarnVersion) > 0 {
+				labels["pod-security.kubernetes.io/warn-version"] = configuration.Spec.PSS.WarnVersion
+			}
+		}
+	}
+	return labels
 }
 
 func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, managedNamespace *operatorv1alpha1.ManagedNamespace, configuration *operatorv1alpha1.ManagedNamespaceConfiguration, namespace *corev1.Namespace) error {
