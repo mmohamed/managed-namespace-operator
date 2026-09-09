@@ -35,6 +35,9 @@ apiVersion: operator.medinvention.io/v1alpha1
 metadata:
     name: main-config
 spec:
+    pssconfiguration: 
+      audit: baseline 
+      warnVersion: v1.36
     resources:
         - resource: 
             kind: RoleBinding

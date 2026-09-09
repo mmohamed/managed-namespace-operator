@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -128,6 +130,42 @@ func (r *ManagedNamespaceConfigurationReconciler) Reconcile(ctx context.Context,
 			}
 			return ctrl.Result{}, nil
 		}
+	}
+
+	// check PSS
+	invalidPSS := false
+	validPSS := []string{"privileged", "baseline", "restricted"}
+	if len(managedNamespaceConfiguration.Spec.PSS.Enforce) > 0 && !slices.Contains(validPSS, managedNamespaceConfiguration.Spec.PSS.Enforce) {
+		invalidPSS = true
+		log.Error(errors.New("invalid PSS Enforce level"), fmt.Sprintf("Invalid PSS Enforce level %s of configuration %s", managedNamespaceConfiguration.Spec.PSS.Enforce, req.NamespacedName))
+
+	}
+	if len(managedNamespaceConfiguration.Spec.PSS.Audit) > 0 && !slices.Contains(validPSS, managedNamespaceConfiguration.Spec.PSS.Audit) {
+		invalidPSS = true
+		log.Error(errors.New("invalid PSS Audit level"), fmt.Sprintf("Invalid PSS Audit level %s of configuration %s", managedNamespaceConfiguration.Spec.PSS.Audit, req.NamespacedName))
+
+	}
+	if len(managedNamespaceConfiguration.Spec.PSS.Warn) > 0 && !slices.Contains(validPSS, managedNamespaceConfiguration.Spec.PSS.Warn) {
+		invalidPSS = true
+		log.Error(errors.New("invalid PSS Warn level"), fmt.Sprintf("Invalid PSS Warn level %s of configuration %s", managedNamespaceConfiguration.Spec.PSS.Warn, req.NamespacedName))
+	}
+	if invalidPSS {
+		// Update status condition to reflect the error
+		meta.SetStatusCondition(&managedNamespaceConfiguration.Status.Conditions, metav1.Condition{
+			Type:    typeDegradedManagedNamespaceConfiguration,
+			Status:  metav1.ConditionFalse,
+			Reason:  "ReconciliationError",
+			Message: fmt.Sprintf("Invalid ManagedNamespaceConfiguration %s PSS configuration, check logs", req.NamespacedName),
+		})
+		if statusErr := r.Status().Update(ctx, &managedNamespaceConfiguration); statusErr != nil {
+			log.Error(statusErr, "Failed to update ManagedNamespaceConfiguration status")
+			return ctrl.Result{}, statusErr
+		}
+		if specErr := r.Patch(ctx, &managedNamespaceConfiguration, client.RawPatch(types.MergePatchType, []byte(`{"spec":{"suspended": true}}`))); specErr != nil {
+			log.Error(specErr, "Failed to update ManagedNamespaceConfiguration suspension status")
+			return ctrl.Result{}, specErr
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// re-fetch

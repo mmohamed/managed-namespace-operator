@@ -27,6 +27,8 @@ type ManagedNamespaceConfigurationSpec struct {
 	// +optional
 	Callbacks []Callbacks `json:"callbacks,omitempty"`
 	// +optional
+	PSS PSSConfiguration `json:"pssconfiguration,omitempty"`
+	// +optional
 	Suspended bool `json:"suspended,omitempty"`
 }
 
@@ -71,6 +73,22 @@ type HTTPHeader struct {
 	Name string `json:"name"`
 	// +required
 	Value string `json:"value"`
+}
+
+// Resources defines an PSS Configuration for managed namespace.
+type PSSConfiguration struct {
+	// +optional
+	Enforce string `json:"enforce"`
+	// +optional
+	EnforceVersion string `json:"enforceVersion"`
+	// +optional
+	Audit string `json:"audit"`
+	// +optional
+	AuditVersion string `json:"auditVersion"`
+	// +optional
+	Warn string `json:"warn"`
+	// +optional
+	WarnVersion string `json:"warnVersion"`
 }
 
 // ManagedNamespaceConfigurationStatus defines the observed state of ManagedNamespaceConfiguration.

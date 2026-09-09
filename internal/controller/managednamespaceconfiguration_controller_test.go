@@ -68,6 +68,10 @@ var _ = Describe("ManagedNamespaceConfiguration Controller", func() {
 					},
 					Spec: operatorv1alpha1.ManagedNamespaceConfigurationSpec{
 						Suspended: false,
+						PSS: operatorv1alpha1.PSSConfiguration{
+							Audit:       "rootless",
+							WarnVersion: "v1.0.1",
+						},
 						Resources: []operatorv1alpha1.Resources{
 							{
 								Resource: operatorv1alpha1.Resource{
