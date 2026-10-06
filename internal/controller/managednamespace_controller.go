@@ -390,7 +390,19 @@ func (r *ManagedNamespaceReconciler) ApplyConfiguration(ctx context.Context, man
 				return err
 			}
 		} else {
-			if err := r.Update(ctx, rs); err != nil {
+			originalRS := &unstructured.Unstructured{}
+			originalRS.SetGroupVersionKind(schema.GroupVersionKind{
+				Kind:    resource.Resource.Kind,
+				Version: resource.Resource.ApiVersion,
+			})
+			if err := r.Get(ctx, rsSelector, originalRS); err != nil {
+				if !apierrors.IsNotFound(err) {
+					log.Error(err, fmt.Sprintf("Unable to get resource %s of configuration %s for updating", resource.Resource.Name, configuration.Name))
+					return err
+				}
+			}
+			originalRS.Object = mergemap.Merge(originalRS.Object, rs.Object)
+			if err := r.Update(ctx, originalRS); err != nil {
 				log.Error(err, fmt.Sprintf("Unable to update resource %s of configuration %s", resource.Resource.Name, configuration.Name))
 				return err
 			}
